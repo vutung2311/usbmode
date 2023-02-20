@@ -14,6 +14,7 @@ enum {
 	DATA_CONFIG,
 	DATA_ALT,
 	DATA_DEV_CLASS,
+	DATA_RESET,
 	__DATA_MAX
 };
 
@@ -81,8 +82,10 @@ static void send_messages(struct usbdev_data *data, struct msg_entry *msg, int n
 
 	usleep(200000);
 
-	if (data->release_delay)
+	if (data->release_delay) {
 		usleep(data->release_delay * 1000);
+		data->release_delay = 0;
+	}
 
 	libusb_release_interface(data->devh, data->interface);
 	return;
@@ -459,6 +462,27 @@ static const struct {
 	[MODE_PANTECH] = { "Pantech", handle_pantech },
 };
 
+static void handle_reset(struct usbdev_data *data)
+{
+	int success;
+	int bpoint = 0;
+
+	do {
+		success = libusb_reset_device(data->devh);
+		bpoint++;
+		if (bpoint > 100) {
+			success = 1;
+		}
+	} while (success < 0);
+
+	data->devh = NULL;
+
+	if (data->release_delay) {
+		usleep(data->release_delay * 1000);
+		data->release_delay = 0;
+	}
+}
+
 void handle_switch(struct usbdev_data *data)
 {
 	static const struct blobmsg_policy data_policy[__DATA_MAX] = {
@@ -472,9 +496,10 @@ void handle_switch(struct usbdev_data *data)
 		[DATA_CONFIG] = { .name = "config", .type = BLOBMSG_TYPE_INT32 },
 		[DATA_ALT] = { .name = "alt", .type = BLOBMSG_TYPE_INT32 },
 		[DATA_DEV_CLASS] = { .name = "t_class", .type = BLOBMSG_TYPE_INT32 },
+		[DATA_RESET] = { .name = "reset", .type = BLOBMSG_TYPE_BOOL },
 	};
 	struct blob_attr *tb[__DATA_MAX];
-	int mode = MODE_GENERIC;
+	int mode = __MODE_MAX;
 	int t_class = 0;
 
 	blobmsg_parse(data_policy, __DATA_MAX, tb, blobmsg_data(data->info), blobmsg_data_len(data->info));
@@ -514,7 +539,9 @@ void handle_switch(struct usbdev_data *data)
 		}
 	}
 
-	modeswitch_cb[mode].cb(data, tb);
+	if (mode != __MODE_MAX) {
+		modeswitch_cb[mode].cb(data, tb);
+	}
 
 	if (tb[DATA_CONFIG]) {
 		int config, config_new;
@@ -532,4 +559,7 @@ void handle_switch(struct usbdev_data *data)
 		int new = blobmsg_get_u32(tb[DATA_ALT]);
 		set_alt_setting(data, new);
 	}
+
+	if (tb[DATA_RESET])
+		handle_reset(data);
 }
