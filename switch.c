@@ -212,7 +212,7 @@ static void handle_sony(struct usbdev_data *data, struct blob_attr **tb)
 	sleep(5);
 
 	for (i = 0; i < 25; i++) {
-		data->devh = libusb_open_device_with_vid_pid(usb,
+		data->devh = libusb_open_device_with_vid_pid(ctx,
 			data->desc.idVendor, data->desc.idProduct);
 		if (data->devh)
 			break;

@@ -26,7 +26,7 @@ int n_messages = 0;
 
 static struct avl_tree devices;
 
-struct libusb_context *usb;
+struct libusb_context *ctx;
 static struct libusb_device **usbdevs;
 static int n_usbdevs;
 
@@ -244,6 +244,7 @@ static void iterate_devs(cmd_cb_t cb)
 	struct usbdev_data data;
 	struct device *dev;
 	int i;
+	int ret;
 
 	if (!cb)
 		return;
@@ -251,8 +252,11 @@ static void iterate_devs(cmd_cb_t cb)
 	for (i = 0; i < n_usbdevs; i++) {
 		memset(&data, 0, sizeof(data));
 
-		if (libusb_get_device_descriptor(usbdevs[i], &data.desc))
+		ret = libusb_get_device_descriptor(usbdevs[i], &data.desc);
+		if (ret < 0) {
+			fprintf(stderr,"Error when retrieving device descriptor: %d\n", ret);
 			continue;
+		}
 
 		sprintf(data.idstr, "%04x:%04x", data.desc.idVendor, data.desc.idProduct);
 
@@ -329,16 +333,20 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	ret = libusb_init(&usb);
+	ret = libusb_init(&ctx);
 	if (ret) {
 		fprintf(stderr, "Failed to initialize libusb: %s\n", libusb_error_name(ret));
 		return 1;
 	}
 
-	n_usbdevs = libusb_get_device_list(usb, &usbdevs);
+	n_usbdevs = libusb_get_device_list(ctx, &usbdevs);
+	if (n_usbdevs < 0) {
+		fprintf(stderr, "Failed to to get USB access!\n");
+		return 1;
+	}
 	iterate_devs(cb);
 	libusb_free_device_list(usbdevs, 1);
-	libusb_exit(usb);
+	libusb_exit(ctx);
 
 	return 0;
 }
